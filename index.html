@@ -1,0 +1,448 @@
+<!--
+Author: viktig_sau (viktigsau.org, me@viktigsau.org)
+Title: The Tank Driver
+
+I did not make the sky background or the alarm sound.
+I made the plane sprite and the "experiment sprite" (person.png)
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Tank Driver</title>
+
+    <link rel="shortcut icon" href="https://viktigsau.org/old.jpg" type="image/x-icon">
+
+    <style>
+        canvas {
+            display: block;
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            width: 100vw;
+            background: black;
+        }
+
+        dialog {
+            width: 50%;
+            height: 50%;
+
+            border: 1px solid black;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas"></canvas>
+
+    <dialog id="endScreen">
+        <h2></h2>
+        <p>Score: <span class="score"></span>!<br>Great Job!</p>
+        <p>Press 'ESC' to restart.</p>
+        <p>Thank you for playing my small game, <strong>The Tank Driver</strong></p>
+        <p>More from me: <a href="https://viktigsau.org/">viktigsau.org</a></p>
+        <p>email: <a href="mailto:me@viktigsau.org">me@viktigsau.org</a></p>
+    </dialog>
+
+    <dialog id="startScreen">
+        <p id="dialogText"></p>
+        <button id="nextButton" onclick="nextLine()">Next</button>
+        <button onclick="start()">skip!</button>
+    </dialog>
+
+    <script>
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        ctx.imageSmoothingEnabled = false;
+        ctx.mozImageSmoothingEnabled = false;
+        ctx.webkitImageSmoothingEnabled = false;
+        ctx.msImageSmoothingEnabled = false;
+
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const playerSprite = new Image();
+        playerSprite.src = "/sprites/plane.png";
+
+        const skySprite = new Image();
+        skySprite.src = "/sprites/sky.jpg";
+        const scoreSprite = new Image();
+        scoreSprite.src = "/sprites/person.png";
+
+        let playerY = canvas.height / 2;
+        let playerYlastDraw = playerY;
+        let playerSpeed = 20;
+        let levelX = 0;
+        let score = 0;
+        let fuel = 200;
+        let debug = false;
+
+        const objects = {
+            person: (x, y) => {
+                return {
+                    type: "point",
+                    image: (() => { const img = new Image(); img.src = "/sprites/person.png"; return img; })(),
+                    draw: function () {
+                        const scale = 1;
+                        const w = playerSprite.width * scale;
+                        const h = playerSprite.height * scale;
+
+                        ctx.save();
+                        ctx.translate(this.x, this.y);
+                        ctx.drawImage(this.image, -w / 2, -h / 2, w, h);
+                        ctx.restore();
+                    },
+                    x: x,
+                    y: y
+                }
+            }
+        }
+
+        const level = [];
+
+        function drawPlayer() {
+            const scale = 5;
+            const w = playerSprite.width * scale;
+            const h = playerSprite.height * scale;
+
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            const dy = playerY - playerYlastDraw;
+            const dx = playerSpeed;
+
+            const rotation = Math.atan2(dy, dx);
+
+            ctx.save();
+            ctx.translate(w / 2, playerY);
+            ctx.rotate(rotation);
+            ctx.drawImage(playerSprite, -w / 2, -h / 2, w, h);
+            ctx.restore();
+            playerYlastDraw = playerY;
+        }
+
+        function drawSky() {
+            const bgAspect = skySprite.width / skySprite.height;
+            const canvasAspect = canvas.width / canvas.height;
+
+            let drawWidth, drawHeight;
+
+            drawHeight = canvas.height;
+            drawWidth = skySprite.width * (canvas.height / skySprite.height);
+
+            const offsetX = (canvas.width - drawWidth) / 2 + levelX % drawWidth;
+            const offsetY = (canvas.height - drawHeight) / 2;
+
+            ctx.drawImage(skySprite, offsetX, offsetY, drawWidth, drawHeight);
+            ctx.drawImage(skySprite, offsetX + drawWidth, offsetY, drawWidth, drawHeight);
+
+            const scale = 1;
+            const w = playerSprite.width * scale;
+            const h = playerSprite.height * scale;
+
+            ctx.save();
+            ctx.translate(20, 20);
+            ctx.drawImage(scoreSprite, -w / 2, -h / 2, w, h);
+            ctx.restore();
+
+            ctx.font = "20px monospace";
+            ctx.fillStyle = "black";
+            ctx.fillText(`${score}`, 50, 20);
+            ctx.fillText(`Fuel: ${fuel > 0 ? fuel.toFixed(0) : 0}L`, 4, 80);
+            ctx.fillText(`Speed: ${playerSpeed.toFixed(1)}m/s`, 4, 100);
+            
+            if (debug) {
+                ctx.fillText(`Num things: ${level.length}`, 4, 120);
+                ctx.fillText(`Pitch: ${planePitch.toFixed(2)}`, 4, 120);
+            }
+        };
+
+        let timer;
+
+        function drawTimer() {
+            const { minutes, seconds, finished } = timer.getRemaining();
+            const timeText = finished ? "TIME'S UP!" : `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+            if (finished) gameOver("Time Ran Out!");
+
+            ctx.font = "24px monospace";
+            ctx.fillStyle = "white";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+
+            ctx.fillText(`${timeText}`, 4, 50);
+        }
+
+        playerSprite.onload = () => {
+            drawPlayer();
+        };
+
+        skySprite.onload = () => {
+            drawSky();
+        };
+
+        playerSprite.onerror = () => {
+            console.error("Image failed to load");
+        };
+
+        skySprite.onerror = () => {
+            console.error("Image failed to load");
+        };
+
+        function gameOver(m) {
+            const endScreen = document.body.querySelector("#endScreen");
+            const h2 = endScreen.querySelector("h2");
+            h2.innerText = m;
+
+            endScreen.querySelectorAll(".score").forEach(el => { el.innerText = score });
+
+            endScreen.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    window.location.reload();
+                }
+            });
+
+            clearInterval(loopInterval);
+            stopSound();
+            endScreen.showModal();
+        };
+
+        const fps = 60;
+
+        let loopInterval;
+        const start = () => {
+            startScreen.close();
+            timer = {
+                start: Date.now(),
+                duration: 3 * 60 * 1000,
+                getRemaining: function () {
+                    const now = Date.now();
+                    const remaining = Math.max(0, this.duration - (now - this.start));
+                    const seconds = Math.floor((remaining / 1000) % 60);
+                    const minutes = Math.floor(remaining / 60000);
+                    return { minutes, seconds, finished: remaining <= 0 };
+                }
+            };
+            loopInterval = setInterval(() => {
+                if (activeKeys.has("ArrowDown")) {
+                    playerY += playerSpeed * .5;
+                    playerSpeed *= 1.009;
+                };
+                if (activeKeys.has("ArrowUp")) {
+                    playerY -= playerSpeed * .5;
+                    playerSpeed *= .99;
+                };
+                if (activeKeys.has("ArrowRight") && fuel > 0) {
+                    playerSpeed += 0.1;
+                    fuel -= 0.1;
+                }
+
+                if (activeKeys.has("ArrowLeft")) {
+                    playerSpeed *= 0.99;
+                }
+
+                playerSpeed *= 0.999;
+
+                if (playerSpeed < 10) {
+                    ensurePlaySound("alarm");
+                    playerY += (10 - playerSpeed);
+                }
+                else {
+                    stopSound("alarm");
+                }
+
+                levelX -= playerSpeed / 2;
+
+                if (playerY < 0) gameOver("You Flew To High And Your Plane Exploded!");
+                if (playerY > window.innerHeight) gameOver("You Crashed!");
+
+                drawSky();
+
+                if (Math.random() < 0.01) {
+                    level.push(objects.person(window.innerWidth + 500, Math.random() * window.innerHeight / 2 + window.innerHeight / 4))
+                }
+
+                const remove = [];
+
+                level.forEach((object, i) => {
+                    object.x -= playerSpeed;
+                    object.draw();
+
+                    if (object.x < -20) {
+                        remove.push(i);
+                    }
+
+                    else if (object.x < 32 * 5 && playerY - 40 < object.y && object.y < playerY + 40) {
+                        remove.push(i);
+                        score += 1;
+                    }
+
+                    if (debug) {
+                        ctx.beginPath();
+                        ctx.arc(object.x, object.y, 10, 0, Math.PI * 2);
+                        ctx.fillStyle = "red";
+                        ctx.fill();
+                    };
+                });
+
+                remove.sort((a, b) => b - a);
+
+                for (const index of remove) {
+                    level.splice(index, 1);
+                }
+
+                drawTimer();
+                drawPlayer();
+
+                if (debug) {
+                    ctx.beginPath();
+                    ctx.arc(32 * 5, playerY, 10, 0, Math.PI * 2);
+                    ctx.fillStyle = "red";
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(32 * 5, playerY - 40, 10, 0, Math.PI * 2);
+                    ctx.fillStyle = "blue";
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(32 * 5, playerY + 40, 10, 0, Math.PI * 2);
+                    ctx.fillStyle = "blue";
+                    ctx.fill();
+                };
+            }, 1000 / fps);
+        }
+
+        const activeKeys = new Set();
+
+        document.addEventListener("keydown", evnent => activeKeys.add(evnent.key));
+        document.addEventListener("keyup", evnent => activeKeys.delete(evnent.key));
+
+        const dialogLines = [
+            "Officer Grey: Welcome Cadet!",
+            "Officer Grey: Congratulations on completing the tank driving test!",
+            "You: Thank you.",
+            "Officer White comes running in the door.",
+            "Officer White: The… The Experiments… They have escaped! And become airborne for some reason?",
+            "Officer Grey: Then we need someone to get them in!",
+            "Officer White: All of our pilots are out on missions!",
+            "Officer Grey: Oh no, can you do it?",
+            "You: Me? But I am only a tank driver!",
+            "Officer Grey: You will learn it quick.",
+            "Officer Grey: It's simple. Use the ArrowUp key to increase elevation and ArrowDown to decrease. Use ArrowRight to increase speed but be careful, fuel is limited. ArrowLeft to brake and you stall below 10m/s.",
+            "Officer Grey: Do you think you can do it?",
+        ];
+
+        let currentLine = 0;
+        let showingLine = false;
+
+        function startDialog() {
+            document.getElementById("startScreen").showModal();
+            currentLine = 0;
+            showLine(dialogLines[currentLine]);
+            document.getElementById("startScreen").addEventListener("keyup", event => {
+                if (event.key == "Enter") nextLine();
+            })
+        }
+
+        function showLine(text) {
+            showingLine = true;
+            const dialogText = document.getElementById("dialogText");
+            dialogText.textContent = "";
+            let i = 0;
+
+            const interval = setInterval(() => {
+                dialogText.textContent += text[i];
+                i++;
+                if (i >= text.length) {
+                    clearInterval(interval);
+                    showingLine = false;
+
+                    if (currentLine == dialogLines.length - 1) {
+                        const dialogText = document.getElementById("dialogText");
+                        dialogText.innerHTML += `
+                            <button onclick="start()">YES! I can</button>
+                            <button onclick="startScreenNo()">NO!</button>
+                        `;
+                        document.getElementById("nextButton").style.display = "none";
+                    }
+                }
+            }, 40);
+        }
+
+        function nextLine() {
+            if (showingLine) return;
+            currentLine++;
+            if (currentLine < dialogLines.length) {
+                showLine(dialogLines[currentLine]);
+            } else {
+                const dialogText = document.getElementById("dialogText");
+                dialogText.innerHTML += `
+                    <br>
+                    <button onclick="start()">YES! I can</button>
+                    <button onclick="startScreenNo()">NO!</button>
+                `;
+                document.getElementById("nextButton").style.display = "none";
+            }
+        }
+
+        function startScreenNo() {
+            gameOver("You declined the mission and the experiments took over the world!");
+        }
+
+        startDialog();
+
+        const sounds = new Set();
+        const soundsEL = {};
+
+        function ensurePlaySound(sound) {
+            if (sounds.has(sound)) return;
+            sounds.add(sound);
+
+            const soundEL = document.createElement("audio");
+            soundEL.src = `/sounds/${sound}.mp3`;
+            soundEL.play();
+
+            soundEL.addEventListener("loadedmetadata", () => {
+                setTimeout(() => {
+                    sounds.delete(sound);
+                }, soundEL.duration * 1000);
+            });
+
+            soundsEL[sound] = soundEL;
+            console.log(soundsEL, sounds);
+        }
+
+        function stopSound(sound=null) {
+            if (sound) {
+                try {
+                    soundsEL[sound].pause();
+                    sounds.delete(sound);
+                    return;
+                } catch {return;}
+            }
+
+            for (const [key, value] of Object.entries(soundsEL)) {
+                try {
+                    value.pause();
+                    sounds.delete(key);
+                } catch {};
+            }
+        }
+    </script>
+</body>
+
+</html>
